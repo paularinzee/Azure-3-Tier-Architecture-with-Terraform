@@ -23,6 +23,8 @@ This project demonstrates a modern three-tier architecture:
 ```bash
 git clone https://github.com/paularinzee/Azure-3-Tier-Architecture-with-Terraform.git
 
+```
+
 You can run the entire application stack using Docker Compose:
 
 ```bash
