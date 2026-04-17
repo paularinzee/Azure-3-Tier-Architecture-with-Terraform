@@ -13,6 +13,9 @@ terraform {
 }
 
 provider "azurerm" {
+  subscription_id = ""
+  # This stops Terraform from checking every single resource provider
+  resource_provider_registrations = "none"
   features {
     key_vault {
       purge_soft_delete_on_destroy    = false

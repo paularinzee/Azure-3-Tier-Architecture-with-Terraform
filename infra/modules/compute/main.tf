@@ -26,16 +26,16 @@ locals {
   provisioning_script_content = var.is_frontend ? templatefile(local.frontend_script_path, {
     # Frontend script variables
     user_assigned_identity_id = azurerm_user_assigned_identity.vmss_identity.id
-    dockerhub_username        = var.dockerhub_username
-    dockerhub_password        = var.dockerhub_password
+    dockerhub_username         = var.dockerhub_username
+    dockerhub_password         = var.dockerhub_password
     application_port          = var.application_port
     full_image_name           = local.full_image_name
     backend_lb_ip             = var.backend_load_balancer_ip
     }) : templatefile(local.backend_script_path, {
     # Backend script variables
     user_assigned_identity_id = azurerm_user_assigned_identity.vmss_identity.id
-    dockerhub_username        = var.dockerhub_username
-    dockerhub_password        = var.dockerhub_password
+    dockerhub_username         = var.dockerhub_username
+    dockerhub_password         = var.dockerhub_password
     application_port          = var.application_port
     full_image_name           = local.full_image_name
     key_vault_id              = var.key_vault_id
@@ -65,6 +65,27 @@ resource "azurerm_public_ip" "lb" {
   tags                = var.tags
 }
 
+# Standalone WAF Policy (Required by Azure Provider 4.x)
+resource "azurerm_web_application_firewall_policy" "waf" {
+  count               = var.is_frontend ? 1 : 0
+  name                = "${var.resource_name_prefix}-wafpolicy"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = var.tags
+
+  policy_settings {
+    enabled = true
+    mode    = "Prevention"
+  }
+
+  managed_rules {
+    managed_rule_set {
+      type    = "OWASP"
+      version = "3.2"
+    }
+  }
+}
+
 # Application Gateway for Frontend
 resource "azurerm_application_gateway" "frontend" {
   count               = var.is_frontend ? 1 : 0
@@ -72,6 +93,9 @@ resource "azurerm_application_gateway" "frontend" {
   resource_group_name = var.resource_group_name
   location            = var.location
   tags                = var.tags
+  
+  # Link to the standalone WAF policy
+  firewall_policy_id  = var.is_frontend ? azurerm_web_application_firewall_policy.waf[0].id : null
 
   sku {
     name     = "WAF_v2"
@@ -133,13 +157,8 @@ resource "azurerm_application_gateway" "frontend" {
     port                = var.application_port
     path                = var.health_probe_path
   }
-
-  waf_configuration {
-    enabled          = true
-    firewall_mode    = "Prevention"
-    rule_set_type    = "OWASP"
-    rule_set_version = "3.2"
-  }
+  
+  # Note: waf_configuration block removed to resolve ApplicationGatewayWafConfigurationDeprecated error
 }
 
 # Internal Load Balancer for Backend
@@ -260,7 +279,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "vmss" {
 
   os_disk {
     storage_account_type = "Standard_LRS"
-    caching              = "ReadWrite"
+    caching               = "ReadWrite"
   }
 
   network_interface {
@@ -295,11 +314,11 @@ resource "azurerm_monitor_autoscale_setting" "vmss_autoscale" {
 
     rule {
       metric_trigger {
-        metric_name        = "Percentage CPU"
+        metric_name         = "Percentage CPU"
         metric_resource_id = azurerm_linux_virtual_machine_scale_set.vmss.id
         time_grain         = "PT1M"
         statistic          = "Average"
-        time_window        = "PT5M"
+        time_window         = "PT5M"
         time_aggregation   = "Average"
         operator           = "GreaterThan"
         threshold          = 75
@@ -315,11 +334,11 @@ resource "azurerm_monitor_autoscale_setting" "vmss_autoscale" {
 
     rule {
       metric_trigger {
-        metric_name        = "Percentage CPU"
+        metric_name         = "Percentage CPU"
         metric_resource_id = azurerm_linux_virtual_machine_scale_set.vmss.id
         time_grain         = "PT1M"
         statistic          = "Average"
-        time_window        = "PT5M"
+        time_window         = "PT5M"
         time_aggregation   = "Average"
         operator           = "LessThan"
         threshold          = 25
